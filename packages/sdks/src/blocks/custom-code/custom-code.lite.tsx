@@ -1,4 +1,4 @@
-import { onMount, useMetadata, useRef, useStore } from '@builder.io/mitosis';
+import { onMount, onUnMount, useMetadata, useRef, useStore } from '@builder.io/mitosis';
 
 useMetadata({
   rsc: {
@@ -17,6 +17,8 @@ export default function CustomCode(props: CustomCodeProps) {
   const state = useStore({
     scriptsInserted: [] as string[],
     scriptsRun: [] as string[],
+    createdFunctions: [] as Function[],
+    createdScripts: [] as HTMLScriptElement[],
   });
 
   onMount(() => {
@@ -37,6 +39,7 @@ export default function CustomCode(props: CustomCodeProps) {
         newScript.async = true;
         newScript.src = script.src;
         document.head.appendChild(newScript);
+        state.createdScripts.push(newScript);
       } else if (
         !script.type ||
         [
@@ -50,12 +53,33 @@ export default function CustomCode(props: CustomCodeProps) {
         }
         try {
           state.scriptsRun.push(script.innerText);
-          new Function(script.innerText)();
+          // Store the function reference for cleanup
+          const fn = new Function(script.innerText);
+          state.createdFunctions.push(fn);
+          fn();
         } catch (error) {
           console.warn('`CustomCode`: Error running script:', error);
         }
       }
     }
+  });
+
+  onUnMount(() => {
+    // Clean up dynamically created script elements
+    state.createdScripts.forEach((script) => {
+      try {
+        if (script.parentNode) {
+          script.parentNode.removeChild(script);
+        }
+      } catch (e) {
+        // Ignore errors during cleanup
+      }
+    });
+    // Clear function references to help with garbage collection
+    state.createdFunctions.length = 0;
+    state.createdScripts.length = 0;
+    state.scriptsInserted.length = 0;
+    state.scriptsRun.length = 0;
   });
 
   return (
